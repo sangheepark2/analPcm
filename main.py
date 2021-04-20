@@ -26,13 +26,15 @@ def moving_average(a, n=3, samplerate=44100):
 
     # moving average
     #MIN_VAL = 0.2
-    MIN_VAL = 0.1
+    #MIN_VAL = 0.1
+    MIN_VAL = float(entry_minval.get())
     ret = ret[n - 1:] / n
     ret[ret < MIN_VAL] = 0
 
     # set to zeros after first non-zero value
-    sec = 0.1  # second
-    samples = int(0.1 * samplerate)
+    #reset_duration = 0.1  # second
+    reset_duration = float(entry_resetval.get())  # second
+    samples = int(reset_duration * samplerate)
     count = 0
     pos = np.arange(60 * 60 * 2)  # 60 second * 60 min * 2 hours
     for i in range(len(ret)):
@@ -276,7 +278,7 @@ if __name__ == '__main__':
 
     update_plot(return_queue)
 
-    top.geometry("250x180")
+    top.geometry("250x240")
 
     rows = 0
     frame_1 = tk.Frame(top, width=100)
@@ -311,10 +313,38 @@ if __name__ == '__main__':
     text_click.set("0.5")
     entry_click = tk.Entry(frame_click, width=10, textvariable=text_click)
     entry_click.pack(side=tk.LEFT)
-    rows += 1
-
     label_click_unit = tk.Label(frame_3, text=" Second", height=1, fg="black")
     label_click_unit.pack(side=tk.LEFT)
+    rows += 1
+
+    frame_min = tk.Frame(top, width=100)
+    frame_min.grid(stick='w', column=0, row=rows)
+    label_minval = tk.Label(frame_min, text="Min Val: ", height=1, fg="black")
+    label_minval.pack(side=tk.LEFT)
+    frame_minval = Frame(frame_min, width=50, height=1)
+    frame_minval.pack(side=tk.LEFT)
+    text_minval = tk.StringVar()
+    text_minval.set("0.2")
+    entry_minval = tk.Entry(frame_minval, width=5, textvariable=text_minval)
+    entry_minval.pack(side=tk.LEFT)
+    label_minval_range = tk.Label(frame_minval, text="(0 ~ 1)", height=1, fg="black")
+    label_minval_range.pack(side=tk.LEFT)
+    rows += 1
+
+    frame_reset = tk.Frame(top, width=100)
+    frame_reset.grid(stick='w', column=0, row=rows)
+    label_reset = tk.Label(frame_reset, text="Reset Duration: ", height=1, fg="black")
+    label_reset.pack(side=tk.LEFT)
+    frame_resetval = Frame(frame_reset, width=20, height=1)
+    frame_resetval.pack(side=tk.LEFT)
+    text_resetval = tk.StringVar()
+    text_resetval.set("0.1")
+    entry_resetval = tk.Entry(frame_resetval, width=5, textvariable=text_resetval)
+    entry_resetval.pack(side=tk.LEFT)
+    label_reset_unit = tk.Label(frame_reset, text=" Second", height=1, fg="black")
+    label_reset_unit.pack(side=tk.LEFT)
+    rows += 1
+
     frame_4 = tk.Frame(top, width=100)
     frame_4.grid(stick='w', column=0, row=rows)
     btnGetDrift = tk.Button(frame_4, text="getDrift", command=cbGetDrift)
