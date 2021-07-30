@@ -18,17 +18,29 @@ import time
 import matplotlib
 from matplotlib.offsetbox import AnchoredText
 
+filenameStat = ""
+
 top = tk.Tk()
 duration = 0
-def moving_average(a, n=3, samplerate=44100):
-    ret = np.cumsum(a, dtype=float)
-    ret[n:] = ret[n:] - ret[:-n]
+def moving_average(inputPcm, samples=3, samplerate=44100):
+    ms = 3  # 2 ms
+    absInput = np.abs(inputPcm)
+    samples = int(ms * samplerate / 1000)
+    #tmpAverage = np.cumsum(absInput, dtype=float)
+    #tmpAverage[samples:] = tmpAverage[samples:] - tmpAverage[:-samples]
 
-    # moving average
-    #MIN_VAL = 0.2
-    #MIN_VAL = 0.1
+    # moving average: average over next specific time frame (ex. 5 ms)
+    tmp = np.flipud(absInput).cumsum()
+    tmp[samples:] = tmp[samples:] - tmp[:-samples]
+    ret = np.flipud(tmp)
+
+    #ret = np.abs(inputPcm)
+    #ret = np.abs(tmpAverage)
     MIN_VAL = float(entry_minval.get())
-    ret = ret[n - 1:] / n
+    MIN_VAL = MIN_VAL * samples
+    #print("===========================================")
+    #print("type of ret: %s" % type(ret))
+    #print("size of ret: %s" % ret.size)
     ret[ret < MIN_VAL] = 0
 
     # set to zeros after first non-zero value
@@ -37,7 +49,64 @@ def moving_average(a, n=3, samplerate=44100):
     samples = int(reset_duration * samplerate)
     count = 0
     pos = np.arange(60 * 60 * 2)  # 60 second * 60 min * 2 hours
+
+    ms = 0.5
+    non_zero_samples_len = int(ms * samplerate / 1000)
     for i in range(len(ret)):
+        #print(ret[i:i+non_zero_samples_len])
+        tmp = ret[i] >= MIN_VAL
+        #if np.count_nonzero(ret[i:non_zero_samples_len + i]) > non_zero_samples_len * 0.8:
+            #print("first cond: %d , non zero count: %d" % (tmp, np.count_nonzero(ret[i:non_zero_samples_len + i] ) )
+            #print("first cond: %d non zero count: %d" % ( tmp, np.count_nonzero(ret[i:non_zero_samples_len + i]) ) )
+
+        #if tmp == 1:
+        #if tmp == 1 and np.count_nonzero(ret[i:non_zero_samples_len + i]) >= non_zero_samples_len * 0.5:
+        #    print("tmp = %d,  %d,   %d -> %d" % (tmp, np.count_nonzero(ret[i:non_zero_samples_len + i]), non_zero_samples_len * 0.5, np.count_nonzero(ret[i:non_zero_samples_len + i]) > non_zero_samples_len * 0.5 ))
+
+        if tmp and (np.count_nonzero(ret[i:non_zero_samples_len + i]) > int(non_zero_samples_len * 0.5) ):
+        #if ret[i] >= MIN_VAL:
+        #    print("non zero count: %d" % np.count_nonzero(ret[i:non_zero_samples_len + i]))
+            pos[count] = i
+
+            ret[i + 1:i + samples] = 0
+            i += samples
+            count += 1
+
+    return count, pos
+
+def moving_average_test(inputPcm, samples=3, samplerate=44100):
+    absInput = np.abs(inputPcm)
+    tmpAverage = np.cumsum(absInput, dtype=float)
+    tmpAverage[samples:] = tmpAverage[samples:] - tmpAverage[:-samples]
+
+    # moving average
+    #MIN_VAL = 0.2
+    #MIN_VAL = 0.1
+    ret = tmpAverage[samples - 1:] / samples
+
+    ret = np.abs(inputPcm)
+    MIN_VAL = float(entry_minval.get())
+    #print("===========================================")
+    #print("type of ret: %s" % type(ret))
+    #print("size of ret: %s" % ret.size)
+    ret[ret < MIN_VAL] = 0
+
+    # set to zeros after first non-zero value
+    #reset_duration = 0.1  # second
+    reset_duration = float(entry_resetval.get())  # second
+    samples = int(reset_duration * samplerate)
+    count = 0
+    pos = np.arange(60 * 60 * 2)  # 60 second * 60 min * 2 hours
+
+    ms = 0.5
+    non_zero_samples_len = int(ms * samplerate / 1000)
+    print("non_zero_samples_len = %d" % non_zero_samples_len)
+    for i in range(len(ret)):
+        #print(ret[i:i+non_zero_samples_len])
+        #if np.count_nonzero(ret[i:non_zero_samples_len + i]) > non_zero_samples_len * 0.8:
+        #    print("non zero count: %d" % np.count_nonzero(ret[i:non_zero_samples_len + i]))
+
+        #if ret[i] >= MIN_VAL and np.count_nonzero(ret[i:non_zero_samples_len + 1]) > non_zero_samples_len * 0.5:
         if ret[i] >= MIN_VAL:
             pos[count] = i
 
@@ -63,6 +132,11 @@ def getDriftProc(fileName):
     result = None
     print("readUnit: %d" % readunit)
     break_flag = True
+
+    filenameStat = fileName + ".txt"
+    print( "filenameStat: %s" % filenameStat )
+    fileStat = open(filenameStat, "wt")
+
     while break_flag:
         print(".")
         data, sample_rate = sf.read(fileName, start=readstart, stop=readstart + readunit, channels=2,
@@ -82,7 +156,7 @@ def getDriftProc(fileName):
 
         lIdx = 0
         rIdx = 0
-        print("lcound: %d rcount: %d" % (lcount, rcount))
+        print("lcount: %d rcount: %d" % (lcount, rcount))
         while lIdx < lcount and rIdx < rcount:
             if abs(lPos[lIdx] - rPos[rIdx]) < maxOffset * sample_rate:
                 #print( "hahhahaha - 1" )
@@ -90,23 +164,28 @@ def getDriftProc(fileName):
                 result = np.append(result, diff[lPos[lIdx]])
                 if diff[lPos[lIdx]] == 0:
                     print("diff == 0 lDix: %d rIdx: %d" % (lIdx, rIdx))
+                else:
+                    strtmp = "%.3f" % diff[lPos[lIdx]]
+                    fileStat.write(strtmp + "\n")
                 lIdx += 1
                 rIdx += 1
             elif lPos[lIdx] - rPos[rIdx] > maxOffset * sample_rate:
-                #print("hahhahaha - 2")
                 rIdx += 1
             elif lPos[lIdx] - rPos[rIdx] < -maxOffset * sample_rate:
-                #print("hahhahaha - 3")
                 lIdx += 1
             else:
-                #print("hahhahaha - 4")
                 diff[lPos[lIdx]] = (lPos[lIdx] - rPos[rIdx]) / sample_rate
                 result = np.append(result, diff[lPos[lIdx]])
+                strtmp = "%.3f" % diff[lPos[lIdx]]
+                fileStat.write(strtmp + "\n")
                 lIdx += 1
                 rIdx += 1
 
     #print("end of getDriftProc result type: %s\n" % type(result));
     #print("end of getDriftProc result.size(): %d\n" % result.size());
+
+    fileStat.close()
+
     return result
 
 
@@ -130,6 +209,7 @@ def browseFiles():
     samplerate = entry_samplerate.get()
 
     print("browseFiles: %s" % fileName)
+
     return fileName, samplerate
 
 
@@ -258,10 +338,8 @@ def update_plot(return_q):
 
             pl.show()
         else:
-            print("\nupdate_plot-------------10\n");
             None
     except queue.Empty:
-        #print("\nupdate_plot-------------100\n");
         pass
     finally:
         top.after(500, update_plot, return_q)
@@ -324,7 +402,7 @@ if __name__ == '__main__':
     frame_minval = Frame(frame_min, width=50, height=1)
     frame_minval.pack(side=tk.LEFT)
     text_minval = tk.StringVar()
-    text_minval.set("0.2")
+    text_minval.set("0.07")
     entry_minval = tk.Entry(frame_minval, width=5, textvariable=text_minval)
     entry_minval.pack(side=tk.LEFT)
     label_minval_range = tk.Label(frame_minval, text="(0 ~ 1)", height=1, fg="black")
@@ -338,7 +416,7 @@ if __name__ == '__main__':
     frame_resetval = Frame(frame_reset, width=20, height=1)
     frame_resetval.pack(side=tk.LEFT)
     text_resetval = tk.StringVar()
-    text_resetval.set("0.1")
+    text_resetval.set("0.4")
     entry_resetval = tk.Entry(frame_resetval, width=5, textvariable=text_resetval)
     entry_resetval.pack(side=tk.LEFT)
     label_reset_unit = tk.Label(frame_reset, text=" Second", height=1, fg="black")
